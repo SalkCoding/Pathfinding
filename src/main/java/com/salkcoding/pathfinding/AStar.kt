@@ -2,26 +2,18 @@ package com.salkcoding.pathfinding
 
 import org.bukkit.Location
 import java.util.*
-import kotlin.math.abs
 
 object AStar {
     private val dx = listOf(1.0, -1.0, 0.0, 0.0, 0.0, 0.0)
     private val dy = listOf(0.0, 0.0, 1.0, -1.0, 0.0, 0.0)
     private val dz = listOf(0.0, 0.0, 0.0, 0.0, 1.0, -1.0)
 
-    private var isRunning = false
-
-    fun pathFinding(start: Location, destination: Location, fly: Boolean): List<Location> {
+    fun pathFinding(start: Location, destination: Location): List<Location> {
         val path = mutableListOf<Location>()
-        if (isRunning) {
-            pathfinding.logger.warning("Already running")
-            return path
-        }
-        isRunning = true
-        pathfinding.logger.info("Start path finding start=${start}, destination=${destination}")
         val pq = PriorityQueue<Node>()
         val visited = mutableSetOf<Location>()
-        val startNode = Node(start, null, start, destination, fly)
+        val startNode = Node(start, null, start, destination)
+        startNode.weight *= 3
         pq.add(startNode)
         visited.add(start)
         while (pq.isNotEmpty()) {
@@ -31,24 +23,23 @@ object AStar {
                 val next = node.current.clone().add(dx[i], dy[i], dz[i])
                 //Arrived destination
                 if (next == destination) {
-                    var nextNode: Node? = Node(next, node, node.current, node.destination, fly)
+                    var nextNode: Node? = Node(next, node, node.current, node.destination)
                     while (nextNode != null) {
                         path.add(nextNode.current)
                         nextNode = nextNode.parent
                     }
-                    isRunning = false
-                    pathfinding.logger.info("Complete path finding")
+                    //pathfinding.logger.info("Complete path finding")
                     return path
                 }
                 if (next in visited || !next.block.isPassable) continue
-                val nextNode = Node(next, node, node.current, node.destination, fly)
-                //if (node.weight < nextNode.weight) continue -> Working but not properly
-                //if (startNode.weight <= nextNode.weight) continue -> Have to test
+                if (!next.block.getRelative(0, -1, 0).isSolid && !next.block.getRelative(0, -2, 0).isSolid) continue
+
+                val nextNode = Node(next, node, node.current, node.destination)
+                if (startNode.weight < nextNode.weight) continue
                 pq.add(nextNode)
                 visited.add(next)
             }
         }
-        isRunning = false
         return path
     }
 
@@ -56,25 +47,22 @@ object AStar {
         val current: Location,
         val parent: Node?,
         val start: Location,
-        val destination: Location,
-        val fly: Boolean
+        val destination: Location
     ) : Comparable<Node> {
-        override fun compareTo(other: Node): Int = weight - other.weight
+        override fun compareTo(other: Node): Int = (weight - other.weight).toInt()
 
         //Heuristic f() = g() + h()
-        val weight = g() + h()
+        var weight = g() + h()
 
         //Start node -> Current node manhattan distance
-        private fun g(): Int {
-            val y = if (fly) current.blockY else current.world.getHighestBlockAt(current).y
-            return abs(current.blockX - start.blockX) + abs(y - start.blockY) + abs(current.blockZ - start.blockZ)
+        private fun g(): Double {
+            return current.distanceSquared(start)
         }
 
 
         //Current node -> destination manhattan distance
-        private fun h(): Int {
-            val y = if (fly) current.blockY else current.world.getHighestBlockAt(current).y
-            return abs(current.blockX - destination.blockX) + abs(y - destination.blockY) + abs(current.blockZ - destination.blockZ)
+        private fun h(): Double {
+            return current.distanceSquared(destination)
         }
     }
 
